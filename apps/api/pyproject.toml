@@ -9,6 +9,9 @@ description = "Backend API for the SupportPilot support operations platform"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi",
+    "pydantic-settings",
+    "psycopg[binary]",
+    "sqlalchemy[asyncio]",
     "uvicorn[standard]",
 ]
 

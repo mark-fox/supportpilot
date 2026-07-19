@@ -1,4 +1,9 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db_session
 
 app = FastAPI(
     title="SupportPilot API",
@@ -11,3 +16,20 @@ app = FastAPI(
 def health_check() -> dict[str, str]:
     """Return the current health status of the API."""
     return {"status": "healthy"}
+
+
+@app.get("/health/database", tags=["system"])
+async def database_health_check(
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, str]:
+    """Confirm that the API can communicate with PostgreSQL."""
+
+    try:
+        await session.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection unavailable",
+        ) from exc
+
+    return {"status": "healthy", "database": "connected"}

@@ -4,6 +4,9 @@ Version: 0.1.0
 Summary: Backend API for the SupportPilot support operations platform
 Requires-Python: >=3.12
 Requires-Dist: fastapi
+Requires-Dist: pydantic-settings
+Requires-Dist: psycopg[binary]
+Requires-Dist: sqlalchemy[asyncio]
 Requires-Dist: uvicorn[standard]
 Provides-Extra: dev
 Requires-Dist: httpx2; extra == "dev"

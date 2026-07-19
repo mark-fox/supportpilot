@@ -1,4 +1,7 @@
 fastapi
+pydantic-settings
+psycopg[binary]
+sqlalchemy[asyncio]
 uvicorn[standard]
 
 [dev]
