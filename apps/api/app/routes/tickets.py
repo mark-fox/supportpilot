@@ -1,6 +1,7 @@
+import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -28,3 +29,24 @@ async def list_tickets(
     result = await session.execute(statement)
 
     return list(result.scalars().all())
+
+
+@router.get("/{ticket_id}", response_model=TicketSummary)
+async def get_ticket(
+    ticket_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> Ticket:
+    """Return one support ticket with its associated customer."""
+
+    statement = select(Ticket).options(selectinload(Ticket.customer)).where(Ticket.id == ticket_id)
+
+    result = await session.execute(statement)
+    ticket = result.scalar_one_or_none()
+
+    if ticket is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        )
+
+    return ticket
