@@ -29,6 +29,16 @@ class TicketPriority(StrEnum):
     URGENT = "urgent"
 
 
+class OrderStatus(StrEnum):
+    """Current fulfillment state of a customer order."""
+
+    PROCESSING = "processing"
+    SHIPPED = "shipped"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
+    REFUNDED = "refunded"
+
+
 class Customer(Base):
     """A customer who can submit one or more support tickets."""
 
@@ -56,6 +66,11 @@ class Customer(Base):
     )
 
     tickets: Mapped[list["Ticket"]] = relationship(
+        back_populates="customer",
+        cascade="all, delete-orphan",
+    )
+
+    orders: Mapped[list["Order"]] = relationship(
         back_populates="customer",
         cascade="all, delete-orphan",
     )
@@ -121,4 +136,53 @@ class Ticket(Base):
 
     customer: Mapped[Customer] = relationship(
         back_populates="tickets",
+    )
+
+
+class Order(Base):
+    """A customer order that may provide context for a support ticket."""
+
+    __tablename__ = "orders"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    order_number: Mapped[str] = mapped_column(
+        String(50),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[OrderStatus] = mapped_column(
+        Enum(
+            OrderStatus,
+            name="order_status",
+            values_callable=lambda enum_class: [item.value for item in enum_class],
+        ),
+        nullable=False,
+        index=True,
+    )
+    total_cents: Mapped[int] = mapped_column(
+        nullable=False,
+    )
+    tracking_number: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    customer: Mapped[Customer] = relationship(
+        back_populates="orders",
     )

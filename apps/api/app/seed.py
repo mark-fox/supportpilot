@@ -4,7 +4,13 @@ import sys
 from sqlalchemy import select
 
 from app.database import async_session_factory
-from app.models import Customer, Ticket, TicketPriority
+from app.models import (
+    Customer,
+    Order,
+    OrderStatus,
+    Ticket,
+    TicketPriority,
+)
 
 
 async def seed_database() -> None:
@@ -62,10 +68,33 @@ async def seed_database() -> None:
             ),
         ]
 
-        session.add_all(tickets)
+        orders = [
+            Order(
+                customer=maya,
+                order_number="SP-10482",
+                status=OrderStatus.PROCESSING,
+                total_cents=12999,
+            ),
+            Order(
+                customer=daniel,
+                order_number="SP-10477",
+                status=OrderStatus.DELIVERED,
+                total_cents=8499,
+                tracking_number="1Z999AA10123456784",
+            ),
+            Order(
+                customer=priya,
+                order_number="SP-10391",
+                status=OrderStatus.DELIVERED,
+                total_cents=4599,
+                tracking_number="9400111899223856928499",
+            ),
+        ]
+
+        session.add_all([*tickets, *orders])
         await session.commit()
 
-        print(f"Seed complete: created {len(tickets)} support tickets.")
+        print(f"Seed complete: created {len(tickets)} support tickets and {len(orders)} orders.")
 
 
 if __name__ == "__main__":
