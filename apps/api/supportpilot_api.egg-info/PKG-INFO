@@ -3,6 +3,7 @@ Name: supportpilot-api
 Version: 0.1.0
 Summary: Backend API for the SupportPilot support operations platform
 Requires-Python: >=3.12
+Requires-Dist: alembic
 Requires-Dist: fastapi
 Requires-Dist: pydantic-settings
 Requires-Dist: psycopg[binary]

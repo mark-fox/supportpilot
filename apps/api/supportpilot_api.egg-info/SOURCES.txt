@@ -1,5 +1,7 @@
 pyproject.toml
 app/__init__.py
+app/config.py
+app/database.py
 app/main.py
 supportpilot_api.egg-info/PKG-INFO
 supportpilot_api.egg-info/SOURCES.txt
