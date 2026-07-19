@@ -4,6 +4,7 @@ Version: 0.1.0
 Summary: Backend API for the SupportPilot support operations platform
 Requires-Python: >=3.12
 Requires-Dist: alembic
+Requires-Dist: email-validator
 Requires-Dist: fastapi
 Requires-Dist: pydantic-settings
 Requires-Dist: psycopg[binary]

@@ -1,6 +1,6 @@
-import enum
 import uuid
 from datetime import datetime
+from enum import StrEnum
 
 from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -11,7 +11,7 @@ class Base(DeclarativeBase):
     """Base class for all SupportPilot database models."""
 
 
-class TicketStatus(str, enum.Enum):
+class TicketStatus(StrEnum):
     """Current lifecycle state of a support ticket."""
 
     OPEN = "open"
@@ -20,7 +20,7 @@ class TicketStatus(str, enum.Enum):
     ESCALATED = "escalated"
 
 
-class TicketPriority(str, enum.Enum):
+class TicketPriority(StrEnum):
     """Operational priority assigned to a support ticket."""
 
     LOW = "low"
