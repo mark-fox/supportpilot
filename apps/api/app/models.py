@@ -39,6 +39,15 @@ class OrderStatus(StrEnum):
     REFUNDED = "refunded"
 
 
+class KnowledgeCategory(StrEnum):
+    """Category used to organize support knowledge articles."""
+
+    BILLING = "billing"
+    SHIPPING = "shipping"
+    ACCOUNT = "account"
+    RETURNS = "returns"
+
+
 class Customer(Base):
     """A customer who can submit one or more support tickets."""
 
@@ -185,4 +194,50 @@ class Order(Base):
 
     customer: Mapped[Customer] = relationship(
         back_populates="orders",
+    )
+
+
+class KnowledgeArticle(Base):
+    """An approved support article available to the agent."""
+
+    __tablename__ = "knowledge_articles"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    title: Mapped[str] = mapped_column(
+        String(250),
+        nullable=False,
+    )
+    category: Mapped[KnowledgeCategory] = mapped_column(
+        Enum(
+            KnowledgeCategory,
+            name="knowledge_category",
+            values_callable=lambda enum_class: [item.value for item in enum_class],
+        ),
+        nullable=False,
+        index=True,
+    )
+    content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        nullable=False,
+        default=True,
+        server_default="true",
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )

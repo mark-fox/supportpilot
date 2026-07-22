@@ -6,6 +6,8 @@ from sqlalchemy import select
 from app.database import async_session_factory
 from app.models import (
     Customer,
+    KnowledgeArticle,
+    KnowledgeCategory,
     Order,
     OrderStatus,
     Ticket,
@@ -91,10 +93,48 @@ async def seed_database() -> None:
             ),
         ]
 
-        session.add_all([*tickets, *orders])
+        knowledge_articles = [
+            KnowledgeArticle(
+                title="Pending and duplicate card charges",
+                category=KnowledgeCategory.BILLING,
+                content=(
+                    "A customer may temporarily see more than one pending card charge "
+                    "when a payment authorization is retried. Pending authorizations "
+                    "normally disappear within three to five business days. Support "
+                    "must verify the related order before promising a refund. If more "
+                    "than one charge has fully posted, escalate the case to billing."
+                ),
+            ),
+            KnowledgeArticle(
+                title="Package marked delivered but missing",
+                category=KnowledgeCategory.SHIPPING,
+                content=(
+                    "Ask the customer to check entrances, parcel lockers, household "
+                    "members, and nearby neighbors. Carriers may mark a package as "
+                    "delivered several hours before arrival. If the package remains "
+                    "missing after 24 hours, escalate the ticket for a carrier claim "
+                    "or replacement review."
+                ),
+            ),
+            KnowledgeArticle(
+                title="Updating an account billing address",
+                category=KnowledgeCategory.ACCOUNT,
+                content=(
+                    "Customers can update their saved billing address from Account "
+                    "Settings under Payment and Billing. Changing the saved address "
+                    "does not alter orders that have already been submitted."
+                ),
+            ),
+        ]
+
+        session.add_all([*tickets, *orders, *knowledge_articles])
         await session.commit()
 
-        print(f"Seed complete: created {len(tickets)} support tickets and {len(orders)} orders.")
+        print(
+            f"Seed complete: created {len(tickets)} support tickets, "
+            f"{len(orders)} orders, and "
+            f"{len(knowledge_articles)} knowledge articles."
+        )
 
 
 if __name__ == "__main__":
