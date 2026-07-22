@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_session
 from app.main import app
-from app.models import Customer, Ticket, TicketPriority, TicketStatus
+from app.models import (
+    Customer,
+    Order,
+    OrderStatus,
+    Ticket,
+    TicketPriority,
+    TicketStatus,
+)
 
 client = TestClient(app)
 
@@ -36,6 +43,20 @@ def create_test_ticket() -> Ticket:
     )
 
 
+def create_test_order(customer_id: uuid.UUID) -> Order:
+    """Create an in-memory order for API response tests."""
+
+    return Order(
+        id=uuid.uuid4(),
+        customer_id=customer_id,
+        order_number="SP-10482",
+        status=OrderStatus.PROCESSING,
+        total_cents=12999,
+        tracking_number=None,
+        created_at=datetime.now(UTC),
+    )
+
+
 def override_database_session(
     session: AsyncSession,
 ):
@@ -47,13 +68,22 @@ def override_database_session(
     return override
 
 
-def test_get_ticket_returns_ticket_with_customer() -> None:
+def test_get_ticket_returns_ticket_with_customer_and_orders() -> None:
     ticket = create_test_ticket()
+    order = create_test_order(ticket.customer_id)
 
     session = AsyncMock(spec=AsyncSession)
-    result = MagicMock()
-    result.scalar_one_or_none.return_value = ticket
-    session.execute.return_value = result
+
+    ticket_result = MagicMock()
+    ticket_result.scalar_one_or_none.return_value = ticket
+
+    orders_result = MagicMock()
+    orders_result.scalars.return_value.all.return_value = [order]
+
+    session.execute.side_effect = [
+        ticket_result,
+        orders_result,
+    ]
 
     app.dependency_overrides[get_db_session] = override_database_session(session)
 
@@ -71,6 +101,9 @@ def test_get_ticket_returns_ticket_with_customer() -> None:
     assert body["status"] == "open"
     assert body["priority"] == "high"
     assert body["customer"]["full_name"] == "Maya Thompson"
+    assert len(body["customer_orders"]) == 1
+    assert body["customer_orders"][0]["order_number"] == "SP-10482"
+    assert body["customer_orders"][0]["total_cents"] == 12999
 
 
 def test_get_ticket_returns_not_found() -> None:

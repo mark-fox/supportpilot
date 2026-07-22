@@ -1,4 +1,4 @@
-import type { TicketSummary } from '../types/ticket'
+import type { TicketDetail, TicketSummary } from '../types/ticket'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 
@@ -20,8 +20,8 @@ export async function getTickets(): Promise<TicketSummary[]> {
     return parseResponse<TicketSummary[]>(response)
 }
 
-export async function getTicket(ticketId: string): Promise<TicketSummary> {
+export async function getTicket(ticketId: string): Promise<TicketDetail> {
     const response = await fetch(`${apiBaseUrl}/tickets/${ticketId}`)
 
-    return parseResponse<TicketSummary>(response)
+    return parseResponse<TicketDetail>(response)
 }

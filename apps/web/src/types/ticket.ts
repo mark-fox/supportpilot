@@ -22,3 +22,23 @@ export interface TicketSummary {
     updated_at: string
     customer: CustomerSummary
 }
+
+export interface TicketDetail extends TicketSummary {
+    customer_orders: OrderSummary[]
+}
+
+export type OrderStatus =
+    | 'processing'
+    | 'shipped'
+    | 'delivered'
+    | 'cancelled'
+    | 'refunded'
+
+export interface OrderSummary {
+    id: string
+    order_number: string
+    status: OrderStatus
+    total_cents: number
+    tracking_number: string | null
+    created_at: string
+}

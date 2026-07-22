@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { getTicket, getTickets } from './api/tickets'
-import type { TicketSummary } from './types/ticket'
+import type { TicketDetail, TicketSummary } from './types/ticket'
 
 function formatDate(dateValue: string): string {
   return new Intl.DateTimeFormat('en-US', {
@@ -10,10 +10,17 @@ function formatDate(dateValue: string): string {
   }).format(new Date(dateValue))
 }
 
+function formatCurrency(cents: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(cents / 100)
+}
+
 function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([])
   const [selectedTicket, setSelectedTicket] =
-    useState<TicketSummary | null>(null)
+    useState<TicketDetail | null>(null)
   const [isQueueLoading, setIsQueueLoading] = useState(true)
   const [isTicketLoading, setIsTicketLoading] = useState(false)
   const [queueError, setQueueError] = useState<string | null>(null)
@@ -110,8 +117,8 @@ function App() {
             {tickets.map((ticket) => (
               <button
                 className={`ticket-card ${selectedTicket?.id === ticket.id
-                    ? 'ticket-card-selected'
-                    : ''
+                  ? 'ticket-card-selected'
+                  : ''
                   }`}
                 key={ticket.id}
                 onClick={() => void handleTicketSelect(ticket.id)}
@@ -169,6 +176,45 @@ function App() {
                   <p className="eyebrow">Customer</p>
                   <h3>{selectedTicket.customer.full_name}</h3>
                   <p>{selectedTicket.customer.email}</p>
+                </section>
+
+                <section className="detail-section">
+                  <div className="section-heading">
+                    <div>
+                      <p className="eyebrow">Customer context</p>
+                      <h3>Orders</h3>
+                    </div>
+
+                    <span className="ticket-count">
+                      {selectedTicket.customer_orders.length}
+                    </span>
+                  </div>
+
+                  {selectedTicket.customer_orders.length === 0 ? (
+                    <p>No orders found for this customer.</p>
+                  ) : (
+                    <div className="order-list">
+                      {selectedTicket.customer_orders.map((order) => (
+                        <article className="order-card" key={order.id}>
+                          <div>
+                            <strong>{order.order_number}</strong>
+                            <span>{formatDate(order.created_at)}</span>
+                          </div>
+
+                          <div>
+                            <span className="order-status">
+                              {order.status}
+                            </span>
+                            <strong>{formatCurrency(order.total_cents)}</strong>
+                          </div>
+
+                          {order.tracking_number && (
+                            <p>Tracking: {order.tracking_number}</p>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                  )}
                 </section>
 
                 <section className="detail-section">
