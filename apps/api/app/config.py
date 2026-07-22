@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     database_url: str = Field(alias="DATABASE_URL")
+    frontend_origin: str = Field(alias="FRONTEND_ORIGIN")
 
     model_config = SettingsConfigDict(
         env_file=".env",
