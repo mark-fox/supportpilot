@@ -121,12 +121,23 @@ textarea {
 }
 
 .ticket-card {
+  width: 100%;
+  border: 0;
   border-bottom: 1px solid #d8d4ca;
+  background: transparent;
   padding: 17px 18px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .ticket-card:hover {
   background: #ebe7dc;
+}
+
+.ticket-card-selected {
+  background: #e2ddd0;
+  box-shadow: inset 3px 0 0 #826b9b;
 }
 
 .ticket-card h3 {
@@ -148,6 +159,115 @@ textarea {
   color: #777267;
   font-size: 11px;
   text-transform: capitalize;
+}
+
+.ticket-workspace {
+  min-width: 0;
+  border: 1px solid #cbc7bd;
+  background: #f5f3ee;
+}
+
+.ticket-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid #d8d4ca;
+  padding: 24px;
+}
+
+.ticket-detail-header h2 {
+  max-width: 620px;
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+}
+
+.ticket-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-badge {
+  border-radius: 3px;
+  background: #ded9e5;
+  padding: 4px 7px;
+  color: #665672;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.ticket-detail-content {
+  display: grid;
+  gap: 24px;
+  padding: 24px;
+}
+
+.detail-section {
+  border-bottom: 1px solid #d8d4ca;
+  padding-bottom: 24px;
+}
+
+.detail-section h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+}
+
+.detail-section>p:last-child {
+  margin-bottom: 0;
+  color: #625e55;
+}
+
+.ticket-description {
+  max-width: 760px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.ticket-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.ticket-metadata div {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #d8d4ca;
+  background: #efede7;
+  padding: 14px;
+}
+
+.ticket-metadata div:last-child {
+  grid-column: 1 / -1;
+}
+
+.ticket-metadata span {
+  color: #777267;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ticket-metadata strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.empty-panel-content {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 36px;
+}
+
+.empty-panel-content h2 {
+  margin: 0;
 }
 
 .priority {
@@ -222,5 +342,17 @@ textarea {
 
   .empty-panel {
     min-height: 300px;
+  }
+
+  .ticket-detail-header {
+    flex-direction: column;
+  }
+
+  .ticket-metadata {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-metadata div:last-child {
+    grid-column: auto;
   }
 }

@@ -1,32 +1,71 @@
 import { useEffect, useState } from 'react'
 
-import { getTickets } from './api/tickets'
+import { getTicket, getTickets } from './api/tickets'
 import type { TicketSummary } from './types/ticket'
+
+function formatDate(dateValue: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(dateValue))
+}
 
 function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [selectedTicket, setSelectedTicket] =
+    useState<TicketSummary | null>(null)
+  const [isQueueLoading, setIsQueueLoading] = useState(true)
+  const [isTicketLoading, setIsTicketLoading] = useState(false)
+  const [queueError, setQueueError] = useState<string | null>(null)
+  const [ticketError, setTicketError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadTickets() {
       try {
         const loadedTickets = await getTickets()
         setTickets(loadedTickets)
+
+        if (loadedTickets.length > 0) {
+          const firstTicket = await getTicket(loadedTickets[0].id)
+          setSelectedTicket(firstTicket)
+        }
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
             : 'An unexpected error occurred'
 
-        setErrorMessage(message)
+        setQueueError(message)
       } finally {
-        setIsLoading(false)
+        setIsQueueLoading(false)
       }
     }
 
     void loadTickets()
   }, [])
+
+  async function handleTicketSelect(ticketId: string) {
+    if (selectedTicket?.id === ticketId) {
+      return
+    }
+
+    setIsTicketLoading(true)
+    setTicketError(null)
+
+    try {
+      const ticket = await getTicket(ticketId)
+      setSelectedTicket(ticket)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'An unexpected error occurred'
+
+      setTicketError(message)
+    } finally {
+      setIsTicketLoading(false)
+    }
+  }
 
   return (
     <main className="workspace">
@@ -53,21 +92,31 @@ function App() {
             <span className="ticket-count">{tickets.length}</span>
           </div>
 
-          {isLoading && <p className="state-message">Loading tickets…</p>}
+          {isQueueLoading && (
+            <p className="state-message">Loading tickets…</p>
+          )}
 
-          {errorMessage && (
+          {queueError && (
             <p className="state-message error-message">
-              Unable to load tickets: {errorMessage}
+              Unable to load tickets: {queueError}
             </p>
           )}
 
-          {!isLoading && !errorMessage && tickets.length === 0 && (
+          {!isQueueLoading && !queueError && tickets.length === 0 && (
             <p className="state-message">No support tickets found.</p>
           )}
 
           <div className="ticket-list">
             {tickets.map((ticket) => (
-              <article className="ticket-card" key={ticket.id}>
+              <button
+                className={`ticket-card ${selectedTicket?.id === ticket.id
+                    ? 'ticket-card-selected'
+                    : ''
+                  }`}
+                key={ticket.id}
+                onClick={() => void handleTicketSelect(ticket.id)}
+                type="button"
+              >
                 <div className="ticket-card-topline">
                   <span className={`priority priority-${ticket.priority}`}>
                     {ticket.priority}
@@ -78,18 +127,86 @@ function App() {
 
                 <h3>{ticket.subject}</h3>
                 <p>{ticket.customer.full_name}</p>
-              </article>
+              </button>
             ))}
           </div>
         </aside>
 
-        <section className="empty-panel">
-          <p className="eyebrow">Ticket workspace</p>
-          <h2>Select a ticket</h2>
-          <p>
-            Ticket details, customer context, and the agent workflow will
-            appear here.
-          </p>
+        <section className="ticket-workspace">
+          {isTicketLoading && (
+            <p className="state-message">Loading ticket…</p>
+          )}
+
+          {ticketError && (
+            <p className="state-message error-message">
+              Unable to load ticket: {ticketError}
+            </p>
+          )}
+
+          {!isTicketLoading && !ticketError && selectedTicket && (
+            <>
+              <header className="ticket-detail-header">
+                <div>
+                  <p className="eyebrow">Selected ticket</p>
+                  <h2>{selectedTicket.subject}</h2>
+                </div>
+
+                <div className="ticket-badges">
+                  <span
+                    className={`priority priority-${selectedTicket.priority}`}
+                  >
+                    {selectedTicket.priority}
+                  </span>
+
+                  <span className="status-badge">
+                    {selectedTicket.status.replace('_', ' ')}
+                  </span>
+                </div>
+              </header>
+
+              <div className="ticket-detail-content">
+                <section className="detail-section">
+                  <p className="eyebrow">Customer</p>
+                  <h3>{selectedTicket.customer.full_name}</h3>
+                  <p>{selectedTicket.customer.email}</p>
+                </section>
+
+                <section className="detail-section">
+                  <p className="eyebrow">Request</p>
+                  <p className="ticket-description">
+                    {selectedTicket.description}
+                  </p>
+                </section>
+
+                <section className="ticket-metadata">
+                  <div>
+                    <span>Created</span>
+                    <strong>{formatDate(selectedTicket.created_at)}</strong>
+                  </div>
+
+                  <div>
+                    <span>Last updated</span>
+                    <strong>{formatDate(selectedTicket.updated_at)}</strong>
+                  </div>
+
+                  <div>
+                    <span>Ticket ID</span>
+                    <strong>{selectedTicket.id}</strong>
+                  </div>
+                </section>
+              </div>
+            </>
+          )}
+
+          {!isTicketLoading && !ticketError && !selectedTicket && (
+            <div className="empty-panel-content">
+              <p className="eyebrow">Ticket workspace</p>
+              <h2>Select a ticket</h2>
+              <p>
+                Ticket details and customer context will appear here.
+              </p>
+            </div>
+          )}
         </section>
 
         <aside className="empty-panel trace-panel">
