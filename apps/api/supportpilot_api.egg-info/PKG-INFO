@@ -13,5 +13,6 @@ Requires-Dist: uvicorn[standard]
 Provides-Extra: dev
 Requires-Dist: httpx2; extra == "dev"
 Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-asyncio; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"
 Requires-Dist: ruff; extra == "dev"

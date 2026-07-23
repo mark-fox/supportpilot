@@ -3,7 +3,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
-from app.models import OrderStatus, TicketPriority, TicketStatus
+from app.models import (
+    KnowledgeCategory,
+    OrderStatus,
+    TicketPriority,
+    TicketStatus,
+)
 
 
 class CustomerSummary(BaseModel):
@@ -27,6 +32,24 @@ class OrderSummary(BaseModel):
     total_cents: int
     tracking_number: str | None
     created_at: datetime
+
+
+class KnowledgeArticleSummary(BaseModel):
+    """Approved knowledge article returned by a support search."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    title: str
+    category: KnowledgeCategory
+    content: str
+
+
+class KnowledgeSearchResponse(BaseModel):
+    """Structured results returned by the knowledge search tool."""
+
+    query: str
+    results: list[KnowledgeArticleSummary]
 
 
 class TicketSummary(BaseModel):

@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db_session
-from app.models import Ticket, Order
-from app.schemas import TicketSummary, TicketDetail
+from app.models import Order, Ticket
+from app.schemas import TicketDetail, TicketSummary
 
 router = APIRouter(
     prefix="/tickets",

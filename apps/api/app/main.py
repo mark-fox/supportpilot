@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db_session
+from app.routes.knowledge import router as knowledge_router
 from app.routes.tickets import router as tickets_router
 
 settings = get_settings()
@@ -26,6 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(knowledge_router)
 app.include_router(tickets_router)
 
 

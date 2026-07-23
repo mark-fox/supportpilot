@@ -9,5 +9,6 @@ uvicorn[standard]
 [dev]
 httpx2
 pytest
+pytest-asyncio
 pytest-cov
 ruff

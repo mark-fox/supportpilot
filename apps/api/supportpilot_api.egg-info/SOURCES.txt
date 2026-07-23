@@ -5,9 +5,17 @@ app/database.py
 app/main.py
 app/models.py
 app/schemas.py
+app/seed.py
+app/routes/__init__.py
+app/routes/knowledge.py
+app/routes/tickets.py
+app/services/__init__.py
+app/services/knowledge.py
 supportpilot_api.egg-info/PKG-INFO
 supportpilot_api.egg-info/SOURCES.txt
 supportpilot_api.egg-info/dependency_links.txt
 supportpilot_api.egg-info/requires.txt
 supportpilot_api.egg-info/top_level.txt
 tests/test_health.py
+tests/test_knowledge.py
+tests/test_tickets.py
