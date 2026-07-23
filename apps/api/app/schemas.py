@@ -34,6 +34,14 @@ class OrderSummary(BaseModel):
     created_at: datetime
 
 
+class OrderLookupResponse(BaseModel):
+    """Structured order context returned by the order lookup tool."""
+
+    customer_id: uuid.UUID
+    order_number: str | None
+    results: list[OrderSummary]
+
+
 class KnowledgeArticleSummary(BaseModel):
     """Approved knowledge article returned by a support search."""
 
