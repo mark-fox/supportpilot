@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.agent.classification import classify_ticket
+from app.agent.severity import assess_ticket_severity
 from app.models import (
     AgentRun,
     AgentRunStatus,
@@ -45,11 +46,10 @@ async def execute_agent_run(
             f"Agent run with status '{agent_run.status}' cannot be executed.",
         )
 
-    started_at = datetime.now(UTC)
-
     agent_run.status = AgentRunStatus.RUNNING
-    agent_run.started_at = started_at
+    agent_run.started_at = datetime.now(UTC)
 
+    classification_started_at = datetime.now(UTC)
     classification = classify_ticket(agent_run.ticket)
 
     classification_step = AgentStep(
@@ -64,11 +64,38 @@ async def execute_agent_run(
         output_data=classification.model_dump(mode="json"),
         evidence=[],
         confidence=classification.confidence,
-        started_at=started_at,
+        started_at=classification_started_at,
         completed_at=datetime.now(UTC),
     )
 
-    session.add(classification_step)
+    severity_started_at = datetime.now(UTC)
+    severity = assess_ticket_severity(
+        ticket=agent_run.ticket,
+        issue_type=classification.issue_type,
+    )
+
+    severity_step = AgentStep(
+        agent_run=agent_run,
+        sequence_number=2,
+        step_type=AgentStepType.SEVERITY_ASSESSMENT,
+        status=AgentStepStatus.COMPLETED,
+        input_data={
+            "ticket_priority": agent_run.ticket.priority.value,
+            "issue_type": classification.issue_type.value,
+        },
+        output_data=severity.model_dump(mode="json"),
+        evidence=[],
+        confidence=severity.confidence,
+        started_at=severity_started_at,
+        completed_at=datetime.now(UTC),
+    )
+
+    session.add_all(
+        [
+            classification_step,
+            severity_step,
+        ],
+    )
     await session.commit()
 
     refreshed_statement = (

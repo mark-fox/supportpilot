@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import (
     AgentRun,
     AgentRunStatus,
+    AgentStepType,
     Ticket,
     TicketPriority,
     TicketStatus,
@@ -45,22 +46,23 @@ def create_agent_run() -> AgentRun:
 
 
 @pytest.mark.asyncio
-async def test_execute_agent_run_persists_classification_step() -> None:
+async def test_execute_agent_run_persists_first_two_steps() -> None:
     agent_run = create_agent_run()
 
     initial_result = MagicMock()
     initial_result.scalar_one_or_none.return_value = agent_run
 
+    session = AsyncMock(spec=AsyncSession)
+
     refreshed_result = MagicMock()
 
     def return_refreshed_run() -> AgentRun:
-        added_step = session.add.call_args.args[0]
-        agent_run.steps = [added_step]
+        added_steps = session.add_all.call_args.args[0]
+        agent_run.steps = list(added_steps)
         return agent_run
 
     refreshed_result.scalar_one.side_effect = return_refreshed_run
 
-    session = AsyncMock(spec=AsyncSession)
     session.execute.side_effect = [
         initial_result,
         refreshed_result,
@@ -74,14 +76,22 @@ async def test_execute_agent_run_persists_classification_step() -> None:
     assert result is agent_run
     assert agent_run.status == AgentRunStatus.RUNNING
     assert agent_run.started_at is not None
-    assert len(agent_run.steps) == 1
+    assert len(agent_run.steps) == 2
 
-    step = agent_run.steps[0]
+    classification_step = agent_run.steps[0]
+    severity_step = agent_run.steps[1]
 
-    assert step.sequence_number == 1
-    assert step.output_data["issue_type"] == "billing"
-    assert step.confidence == 0.9
+    assert classification_step.sequence_number == 1
+    assert classification_step.step_type == AgentStepType.CLASSIFICATION
+    assert classification_step.output_data["issue_type"] == "billing"
+    assert classification_step.confidence == 0.9
 
+    assert severity_step.sequence_number == 2
+    assert severity_step.step_type == AgentStepType.SEVERITY_ASSESSMENT
+    assert severity_step.output_data["severity"] == "high"
+    assert severity_step.confidence == 0.9
+
+    session.add_all.assert_called_once()
     session.commit.assert_awaited_once()
 
 
