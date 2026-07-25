@@ -4,6 +4,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr
 
 from app.models import (
+    AgentRecommendation,
+    AgentRunStatus,
     KnowledgeCategory,
     OrderStatus,
     TicketPriority,
@@ -79,3 +81,20 @@ class TicketDetail(TicketSummary):
     """Complete ticket information used by the support workspace."""
 
     customer_orders: list[OrderSummary]
+
+
+class AgentRunSummary(BaseModel):
+    """Summary of one traceable support-agent execution."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    ticket_id: uuid.UUID
+    status: AgentRunStatus
+    recommendation: AgentRecommendation | None
+    confidence: float | None
+    drafted_response: str | None
+    error_message: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
