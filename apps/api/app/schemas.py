@@ -6,6 +6,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 from app.models import (
     AgentRecommendation,
     AgentRunStatus,
+    AgentStepStatus,
+    AgentStepType,
     KnowledgeCategory,
     OrderStatus,
     TicketPriority,
@@ -98,3 +100,28 @@ class AgentRunSummary(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
+
+
+class AgentStepSummary(BaseModel):
+    """One ordered, auditable step from an agent workflow."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    sequence_number: int
+    step_type: AgentStepType
+    status: AgentStepStatus
+    input_data: dict | None
+    output_data: dict | None
+    evidence: list | None
+    confidence: float | None
+    error_message: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+
+
+class AgentRunDetail(AgentRunSummary):
+    """An agent run with its complete ordered workflow trace."""
+
+    steps: list[AgentStepSummary]
