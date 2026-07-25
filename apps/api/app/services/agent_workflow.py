@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.agent.classification import classify_ticket
+from app.agent.evidence import assess_evidence
 from app.agent.severity import assess_ticket_severity
 from app.models import (
     AgentRun,
@@ -169,12 +170,47 @@ async def execute_agent_run(
         completed_at=datetime.now(UTC),
     )
 
+    evidence_assessment_started_at = datetime.now(UTC)
+
+    evidence_assessment = assess_evidence(
+        issue_type=classification.issue_type,
+        knowledge_result_count=len(knowledge_articles),
+        order_result_count=len(customer_orders),
+    )
+
+    evidence_assessment_step = AgentStep(
+        agent_run=agent_run,
+        sequence_number=5,
+        step_type=AgentStepType.EVIDENCE_ASSESSMENT,
+        status=AgentStepStatus.COMPLETED,
+        input_data={
+            "issue_type": classification.issue_type.value,
+            "knowledge_result_count": len(knowledge_articles),
+            "order_result_count": len(customer_orders),
+        },
+        output_data=evidence_assessment.model_dump(mode="json"),
+        evidence=[
+            {
+                "source": "knowledge_search",
+                "result_count": len(knowledge_articles),
+            },
+            {
+                "source": "order_lookup",
+                "result_count": len(customer_orders),
+            },
+        ],
+        confidence=evidence_assessment.confidence,
+        started_at=evidence_assessment_started_at,
+        completed_at=datetime.now(UTC),
+    )
+
     session.add_all(
         [
             classification_step,
             severity_step,
             knowledge_step,
             order_lookup_step,
+            evidence_assessment_step,
         ],
     )
     await session.commit()

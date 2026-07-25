@@ -127,12 +127,13 @@ async def test_execute_agent_run_persists_first_four_steps(
     assert result is agent_run
     assert agent_run.status == AgentRunStatus.RUNNING
     assert agent_run.started_at is not None
-    assert len(agent_run.steps) == 4
+    assert len(agent_run.steps) == 5
 
     classification_step = agent_run.steps[0]
     severity_step = agent_run.steps[1]
     knowledge_step = agent_run.steps[2]
     order_lookup_step = agent_run.steps[3]
+    evidence_assessment_step = agent_run.steps[4]
 
     assert classification_step.sequence_number == 1
     assert classification_step.step_type == AgentStepType.CLASSIFICATION
@@ -164,6 +165,19 @@ async def test_execute_agent_run_persists_first_four_steps(
         },
     ]
     assert order_lookup_step.confidence == 1.0
+
+    assert evidence_assessment_step.sequence_number == 5
+    assert evidence_assessment_step.step_type == AgentStepType.EVIDENCE_ASSESSMENT
+    assert evidence_assessment_step.output_data == {
+        "is_sufficient": True,
+        "confidence": 0.95,
+        "missing_evidence": [],
+        "rationale": (
+            "The workflow found a supported classification, approved policy, "
+            "and customer-specific order context."
+        ),
+    }
+    assert evidence_assessment_step.confidence == 0.95
 
     knowledge_search_mock.assert_awaited_once_with(
         session=session,
@@ -218,6 +232,7 @@ async def test_execute_agent_run_records_missing_context(
 
     knowledge_step = result.steps[2]
     order_lookup_step = result.steps[3]
+    evidence_assessment_step = result.steps[4]
 
     assert knowledge_step.output_data["result_count"] == 0
     assert knowledge_step.evidence == []
@@ -226,6 +241,13 @@ async def test_execute_agent_run_records_missing_context(
     assert order_lookup_step.output_data["result_count"] == 0
     assert order_lookup_step.evidence == []
     assert order_lookup_step.confidence == 0.0
+
+    assert evidence_assessment_step.output_data["is_sufficient"] is False
+    assert evidence_assessment_step.output_data["missing_evidence"] == [
+        "approved knowledge article",
+        "customer order context",
+    ]
+    assert evidence_assessment_step.confidence == 0.9
 
 
 @pytest.mark.asyncio
