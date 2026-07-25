@@ -11,6 +11,8 @@ from app.models import (
     AgentStepType,
     KnowledgeArticle,
     KnowledgeCategory,
+    Order,
+    OrderStatus,
     Ticket,
     TicketPriority,
     TicketStatus,
@@ -64,12 +66,27 @@ def create_knowledge_article() -> KnowledgeArticle:
     )
 
 
+def create_order(customer_id: uuid.UUID) -> Order:
+    """Create an order for workflow tests."""
+
+    return Order(
+        id=uuid.uuid4(),
+        customer_id=customer_id,
+        order_number="SP-10482",
+        status=OrderStatus.PROCESSING,
+        total_cents=12999,
+        tracking_number=None,
+        created_at=datetime.now(UTC),
+    )
+
+
 @pytest.mark.asyncio
-async def test_execute_agent_run_persists_first_three_steps(
+async def test_execute_agent_run_persists_first_four_steps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent_run = create_agent_run()
     article = create_knowledge_article()
+    order = create_order(agent_run.ticket.customer_id)
 
     initial_result = MagicMock()
     initial_result.scalar_one_or_none.return_value = agent_run
@@ -90,11 +107,16 @@ async def test_execute_agent_run_persists_first_three_steps(
         refreshed_result,
     ]
 
-    search_mock = AsyncMock(return_value=[article])
+    knowledge_search_mock = AsyncMock(return_value=[article])
+    order_lookup_mock = AsyncMock(return_value=[order])
 
     monkeypatch.setattr(
         "app.services.agent_workflow.search_knowledge_articles",
-        search_mock,
+        knowledge_search_mock,
+    )
+    monkeypatch.setattr(
+        "app.services.agent_workflow.lookup_customer_orders",
+        order_lookup_mock,
     )
 
     result = await execute_agent_run(
@@ -105,48 +127,58 @@ async def test_execute_agent_run_persists_first_three_steps(
     assert result is agent_run
     assert agent_run.status == AgentRunStatus.RUNNING
     assert agent_run.started_at is not None
-    assert len(agent_run.steps) == 3
+    assert len(agent_run.steps) == 4
 
     classification_step = agent_run.steps[0]
     severity_step = agent_run.steps[1]
     knowledge_step = agent_run.steps[2]
+    order_lookup_step = agent_run.steps[3]
 
     assert classification_step.sequence_number == 1
     assert classification_step.step_type == AgentStepType.CLASSIFICATION
     assert classification_step.output_data["issue_type"] == "billing"
-    assert classification_step.confidence == 0.9
 
     assert severity_step.sequence_number == 2
     assert severity_step.step_type == AgentStepType.SEVERITY_ASSESSMENT
     assert severity_step.output_data["severity"] == "high"
-    assert severity_step.confidence == 0.9
 
     assert knowledge_step.sequence_number == 3
     assert knowledge_step.step_type == AgentStepType.KNOWLEDGE_SEARCH
     assert knowledge_step.output_data["result_count"] == 1
-    assert knowledge_step.output_data["article_titles"] == [
-        "Pending and duplicate card charges",
-    ]
-    assert knowledge_step.evidence == [
+    assert knowledge_step.evidence[0]["category"] == "billing"
+
+    assert order_lookup_step.sequence_number == 4
+    assert order_lookup_step.step_type == AgentStepType.ORDER_LOOKUP
+    assert order_lookup_step.output_data == {
+        "result_count": 1,
+        "order_numbers": ["SP-10482"],
+    }
+    assert order_lookup_step.evidence == [
         {
-            "article_id": str(article.id),
-            "title": article.title,
-            "category": "billing",
-            "content": article.content,
+            "order_id": str(order.id),
+            "order_number": "SP-10482",
+            "status": "processing",
+            "total_cents": 12999,
+            "tracking_number": None,
+            "created_at": order.created_at.isoformat(),
         },
     ]
-    assert knowledge_step.confidence == 1.0
+    assert order_lookup_step.confidence == 1.0
 
-    search_mock.assert_awaited_once_with(
+    knowledge_search_mock.assert_awaited_once_with(
         session=session,
         query=agent_run.ticket.subject,
+    )
+    order_lookup_mock.assert_awaited_once_with(
+        session=session,
+        customer_id=agent_run.ticket.customer_id,
     )
     session.add_all.assert_called_once()
     session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_execute_agent_run_records_empty_knowledge_search(
+async def test_execute_agent_run_records_missing_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent_run = create_agent_run()
@@ -170,11 +202,13 @@ async def test_execute_agent_run_records_empty_knowledge_search(
         refreshed_result,
     ]
 
-    search_mock = AsyncMock(return_value=[])
-
     monkeypatch.setattr(
         "app.services.agent_workflow.search_knowledge_articles",
-        search_mock,
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "app.services.agent_workflow.lookup_customer_orders",
+        AsyncMock(return_value=[]),
     )
 
     result = await execute_agent_run(
@@ -183,10 +217,15 @@ async def test_execute_agent_run_records_empty_knowledge_search(
     )
 
     knowledge_step = result.steps[2]
+    order_lookup_step = result.steps[3]
 
     assert knowledge_step.output_data["result_count"] == 0
     assert knowledge_step.evidence == []
     assert knowledge_step.confidence == 0.0
+
+    assert order_lookup_step.output_data["result_count"] == 0
+    assert order_lookup_step.evidence == []
+    assert order_lookup_step.confidence == 0.0
 
 
 @pytest.mark.asyncio

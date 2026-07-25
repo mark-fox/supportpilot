@@ -15,6 +15,7 @@ from app.models import (
     AgentStepType,
 )
 from app.services.knowledge import search_knowledge_articles
+from app.services.orders import lookup_customer_orders
 
 
 class AgentRunNotExecutableError(Exception):
@@ -129,11 +130,51 @@ async def execute_agent_run(
         completed_at=datetime.now(UTC),
     )
 
+    order_lookup_started_at = datetime.now(UTC)
+
+    customer_orders = await lookup_customer_orders(
+        session=session,
+        customer_id=agent_run.ticket.customer_id,
+    )
+
+    order_evidence = [
+        {
+            "order_id": str(order.id),
+            "order_number": order.order_number,
+            "status": order.status.value,
+            "total_cents": order.total_cents,
+            "tracking_number": order.tracking_number,
+            "created_at": order.created_at.isoformat(),
+        }
+        for order in customer_orders
+    ]
+
+    order_lookup_step = AgentStep(
+        agent_run=agent_run,
+        sequence_number=4,
+        step_type=AgentStepType.ORDER_LOOKUP,
+        status=AgentStepStatus.COMPLETED,
+        input_data={
+            "customer_id": str(agent_run.ticket.customer_id),
+            "order_number": None,
+            "result_limit": 5,
+        },
+        output_data={
+            "result_count": len(customer_orders),
+            "order_numbers": [order.order_number for order in customer_orders],
+        },
+        evidence=order_evidence,
+        confidence=1.0 if customer_orders else 0.0,
+        started_at=order_lookup_started_at,
+        completed_at=datetime.now(UTC),
+    )
+
     session.add_all(
         [
             classification_step,
             severity_step,
             knowledge_step,
+            order_lookup_step,
         ],
     )
     await session.commit()
