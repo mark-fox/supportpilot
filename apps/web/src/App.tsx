@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 
+import {
+  createAgentRun,
+  executeAgentRun,
+} from './api/agentRuns'
 import { getTicket, getTickets } from './api/tickets'
+import type {
+  AgentRunDetail,
+  AgentStepSummary,
+} from './types/agentRun'
 import type { TicketDetail, TicketSummary } from './types/ticket'
 
 function formatDate(dateValue: string): string {
@@ -17,14 +25,61 @@ function formatCurrency(cents: number): string {
   }).format(cents / 100)
 }
 
+function formatLabel(value: string): string {
+  return value
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+function formatConfidence(confidence: number | null): string {
+  if (confidence === null) {
+    return 'Not available'
+  }
+
+  return `${Math.round(confidence * 100)}%`
+}
+
+function getStepSummary(step: AgentStepSummary): string {
+  switch (step.step_type) {
+    case 'classification':
+      return String(step.output_data?.issue_type ?? 'Classification complete')
+    case 'severity_assessment':
+      return String(step.output_data?.severity ?? 'Severity assessed')
+    case 'knowledge_search':
+      return `${String(step.output_data?.result_count ?? 0)} article(s) found`
+    case 'order_lookup':
+      return `${String(step.output_data?.result_count ?? 0)} order(s) found`
+    case 'evidence_assessment':
+      return step.output_data?.is_sufficient
+        ? 'Evidence sufficient'
+        : 'Evidence insufficient'
+    case 'response_draft':
+      return step.output_data?.was_drafted
+        ? 'Draft created'
+        : 'Draft skipped'
+    case 'escalation_decision':
+      return formatLabel(
+        String(step.output_data?.recommendation ?? 'Decision complete'),
+      )
+    default:
+      return formatLabel(step.status)
+  }
+}
+
 function App() {
   const [tickets, setTickets] = useState<TicketSummary[]>([])
   const [selectedTicket, setSelectedTicket] =
     useState<TicketDetail | null>(null)
+  const [agentRun, setAgentRun] = useState<AgentRunDetail | null>(null)
+
   const [isQueueLoading, setIsQueueLoading] = useState(true)
   const [isTicketLoading, setIsTicketLoading] = useState(false)
+  const [isAgentRunning, setIsAgentRunning] = useState(false)
+
   const [queueError, setQueueError] = useState<string | null>(null)
   const [ticketError, setTicketError] = useState<string | null>(null)
+  const [agentError, setAgentError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadTickets() {
@@ -58,6 +113,8 @@ function App() {
 
     setIsTicketLoading(true)
     setTicketError(null)
+    setAgentRun(null)
+    setAgentError(null)
 
     try {
       const ticket = await getTicket(ticketId)
@@ -71,6 +128,32 @@ function App() {
       setTicketError(message)
     } finally {
       setIsTicketLoading(false)
+    }
+  }
+
+  async function handleRunAgent() {
+    if (!selectedTicket) {
+      return
+    }
+
+    setIsAgentRunning(true)
+    setAgentError(null)
+    setAgentRun(null)
+
+    try {
+      const createdRun = await createAgentRun(selectedTicket.id)
+      const completedRun = await executeAgentRun(createdRun.id)
+
+      setAgentRun(completedRun)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'An unexpected error occurred'
+
+      setAgentError(message)
+    } finally {
+      setIsAgentRunning(false)
     }
   }
 
@@ -117,8 +200,8 @@ function App() {
             {tickets.map((ticket) => (
               <button
                 className={`ticket-card ${selectedTicket?.id === ticket.id
-                  ? 'ticket-card-selected'
-                  : ''
+                    ? 'ticket-card-selected'
+                    : ''
                   }`}
                 key={ticket.id}
                 onClick={() => void handleTicketSelect(ticket.id)}
@@ -129,7 +212,7 @@ function App() {
                     {ticket.priority}
                   </span>
 
-                  <span>{ticket.status.replace('_', ' ')}</span>
+                  <span>{formatLabel(ticket.status)}</span>
                 </div>
 
                 <h3>{ticket.subject}</h3>
@@ -158,16 +241,27 @@ function App() {
                   <h2>{selectedTicket.subject}</h2>
                 </div>
 
-                <div className="ticket-badges">
-                  <span
-                    className={`priority priority-${selectedTicket.priority}`}
-                  >
-                    {selectedTicket.priority}
-                  </span>
+                <div className="ticket-header-actions">
+                  <div className="ticket-badges">
+                    <span
+                      className={`priority priority-${selectedTicket.priority}`}
+                    >
+                      {selectedTicket.priority}
+                    </span>
 
-                  <span className="status-badge">
-                    {selectedTicket.status.replace('_', ' ')}
-                  </span>
+                    <span className="status-badge">
+                      {formatLabel(selectedTicket.status)}
+                    </span>
+                  </div>
+
+                  <button
+                    className="run-agent-button"
+                    disabled={isAgentRunning}
+                    onClick={() => void handleRunAgent()}
+                    type="button"
+                  >
+                    {isAgentRunning ? 'Running agent…' : 'Run agent'}
+                  </button>
                 </div>
               </header>
 
@@ -203,9 +297,11 @@ function App() {
 
                           <div>
                             <span className="order-status">
-                              {order.status}
+                              {formatLabel(order.status)}
                             </span>
-                            <strong>{formatCurrency(order.total_cents)}</strong>
+                            <strong>
+                              {formatCurrency(order.total_cents)}
+                            </strong>
                           </div>
 
                           {order.tracking_number && (
@@ -223,6 +319,25 @@ function App() {
                     {selectedTicket.description}
                   </p>
                 </section>
+
+                {agentRun?.drafted_response && (
+                  <section className="draft-section">
+                    <div className="section-heading">
+                      <div>
+                        <p className="eyebrow">Agent artifact</p>
+                        <h3>Drafted response</h3>
+                      </div>
+
+                      <span className="status-badge">
+                        Human approval required
+                      </span>
+                    </div>
+
+                    <pre className="drafted-response">
+                      {agentRun.drafted_response}
+                    </pre>
+                  </section>
+                )}
 
                 <section className="ticket-metadata">
                   <div>
@@ -248,20 +363,99 @@ function App() {
             <div className="empty-panel-content">
               <p className="eyebrow">Ticket workspace</p>
               <h2>Select a ticket</h2>
-              <p>
-                Ticket details and customer context will appear here.
-              </p>
+              <p>Ticket details and customer context will appear here.</p>
             </div>
           )}
         </section>
 
-        <aside className="empty-panel trace-panel">
-          <p className="eyebrow">Agent activity</p>
-          <h2>Run trace</h2>
-          <p>
-            Classification, evidence, tool calls, and recommendations will
-            appear here.
-          </p>
+        <aside className="trace-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Agent activity</p>
+              <h2>Run trace</h2>
+            </div>
+
+            {agentRun && (
+              <span className="ticket-count">
+                {agentRun.steps.length}
+              </span>
+            )}
+          </div>
+
+          {isAgentRunning && (
+            <div className="trace-empty">
+              <p className="eyebrow">Workflow running</p>
+              <h3>Processing ticket</h3>
+              <p>
+                The agent is gathering evidence and preparing a recommendation.
+              </p>
+            </div>
+          )}
+
+          {agentError && (
+            <p className="state-message error-message">
+              Unable to run agent: {agentError}
+            </p>
+          )}
+
+          {!isAgentRunning && !agentError && !agentRun && (
+            <div className="trace-empty">
+              <p className="eyebrow">No active run</p>
+              <h3>Run the agent</h3>
+              <p>
+                Classification, evidence, tool calls, and recommendations will
+                appear here.
+              </p>
+            </div>
+          )}
+
+          {!isAgentRunning && agentRun && (
+            <>
+              <section className="run-summary">
+                <div>
+                  <span>Status</span>
+                  <strong>{formatLabel(agentRun.status)}</strong>
+                </div>
+
+                <div>
+                  <span>Recommendation</span>
+                  <strong>
+                    {agentRun.recommendation
+                      ? formatLabel(agentRun.recommendation)
+                      : 'None'}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Confidence</span>
+                  <strong>{formatConfidence(agentRun.confidence)}</strong>
+                </div>
+              </section>
+
+              <div className="trace-list">
+                {agentRun.steps.map((step) => (
+                  <article className="trace-step" key={step.id}>
+                    <div className="trace-step-marker">
+                      {step.sequence_number}
+                    </div>
+
+                    <div className="trace-step-content">
+                      <div className="trace-step-heading">
+                        <h3>{formatLabel(step.step_type)}</h3>
+                        <span>{formatConfidence(step.confidence)}</span>
+                      </div>
+
+                      <p>{getStepSummary(step)}</p>
+
+                      <div className="trace-step-status">
+                        {formatLabel(step.status)}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
         </aside>
       </section>
     </main>
