@@ -81,7 +81,7 @@ def create_order(customer_id: uuid.UUID) -> Order:
 
 
 @pytest.mark.asyncio
-async def test_execute_agent_run_persists_first_four_steps(
+async def test_execute_agent_run_persists_first_six_steps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent_run = create_agent_run()
@@ -92,7 +92,6 @@ async def test_execute_agent_run_persists_first_four_steps(
     initial_result.scalar_one_or_none.return_value = agent_run
 
     session = AsyncMock(spec=AsyncSession)
-
     refreshed_result = MagicMock()
 
     def return_refreshed_run() -> AgentRun:
@@ -127,13 +126,14 @@ async def test_execute_agent_run_persists_first_four_steps(
     assert result is agent_run
     assert agent_run.status == AgentRunStatus.RUNNING
     assert agent_run.started_at is not None
-    assert len(agent_run.steps) == 5
+    assert len(agent_run.steps) == 6
 
     classification_step = agent_run.steps[0]
     severity_step = agent_run.steps[1]
     knowledge_step = agent_run.steps[2]
     order_lookup_step = agent_run.steps[3]
     evidence_assessment_step = agent_run.steps[4]
+    response_draft_step = agent_run.steps[5]
 
     assert classification_step.sequence_number == 1
     assert classification_step.step_type == AgentStepType.CLASSIFICATION
@@ -179,6 +179,15 @@ async def test_execute_agent_run_persists_first_four_steps(
     }
     assert evidence_assessment_step.confidence == 0.95
 
+    assert response_draft_step.sequence_number == 6
+    assert response_draft_step.step_type == AgentStepType.RESPONSE_DRAFT
+    assert response_draft_step.output_data["was_drafted"] is True
+    assert "SP-10482" in response_draft_step.output_data["drafted_response"]
+    assert response_draft_step.confidence == 0.9
+
+    assert agent_run.drafted_response is not None
+    assert "SP-10482" in agent_run.drafted_response
+
     knowledge_search_mock.assert_awaited_once_with(
         session=session,
         query=agent_run.ticket.subject,
@@ -192,7 +201,7 @@ async def test_execute_agent_run_persists_first_four_steps(
 
 
 @pytest.mark.asyncio
-async def test_execute_agent_run_records_missing_context(
+async def test_execute_agent_run_skips_draft_when_context_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent_run = create_agent_run()
@@ -201,7 +210,6 @@ async def test_execute_agent_run_records_missing_context(
     initial_result.scalar_one_or_none.return_value = agent_run
 
     session = AsyncMock(spec=AsyncSession)
-
     refreshed_result = MagicMock()
 
     def return_refreshed_run() -> AgentRun:
@@ -216,13 +224,16 @@ async def test_execute_agent_run_records_missing_context(
         refreshed_result,
     ]
 
+    knowledge_search_mock = AsyncMock(return_value=[])
+    order_lookup_mock = AsyncMock(return_value=[])
+
     monkeypatch.setattr(
         "app.services.agent_workflow.search_knowledge_articles",
-        AsyncMock(return_value=[]),
+        knowledge_search_mock,
     )
     monkeypatch.setattr(
         "app.services.agent_workflow.lookup_customer_orders",
-        AsyncMock(return_value=[]),
+        order_lookup_mock,
     )
 
     result = await execute_agent_run(
@@ -230,9 +241,13 @@ async def test_execute_agent_run_records_missing_context(
         agent_run_id=agent_run.id,
     )
 
+    assert result is agent_run
+    assert len(result.steps) == 6
+
     knowledge_step = result.steps[2]
     order_lookup_step = result.steps[3]
     evidence_assessment_step = result.steps[4]
+    response_draft_step = result.steps[5]
 
     assert knowledge_step.output_data["result_count"] == 0
     assert knowledge_step.evidence == []
@@ -248,6 +263,24 @@ async def test_execute_agent_run_records_missing_context(
         "customer order context",
     ]
     assert evidence_assessment_step.confidence == 0.9
+
+    assert response_draft_step.sequence_number == 6
+    assert response_draft_step.step_type == AgentStepType.RESPONSE_DRAFT
+    assert response_draft_step.output_data["was_drafted"] is False
+    assert response_draft_step.output_data["drafted_response"] is None
+    assert response_draft_step.confidence == 0.0
+
+    assert result.drafted_response is None
+
+    knowledge_search_mock.assert_awaited_once_with(
+        session=session,
+        query=agent_run.ticket.subject,
+    )
+    order_lookup_mock.assert_awaited_once_with(
+        session=session,
+        customer_id=agent_run.ticket.customer_id,
+    )
+    session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

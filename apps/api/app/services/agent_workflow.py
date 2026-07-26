@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.agent.classification import classify_ticket
+from app.agent.drafting import draft_support_response
 from app.agent.evidence import assess_evidence
 from app.agent.severity import assess_ticket_severity
 from app.models import (
@@ -204,6 +205,51 @@ async def execute_agent_run(
         completed_at=datetime.now(UTC),
     )
 
+    response_draft_started_at = datetime.now(UTC)
+
+    response_draft = draft_support_response(
+        ticket=agent_run.ticket,
+        issue_type=classification.issue_type,
+        knowledge_articles=knowledge_articles,
+        customer_orders=customer_orders,
+        evidence_is_sufficient=evidence_assessment.is_sufficient,
+    )
+
+    response_draft_step = AgentStep(
+        agent_run=agent_run,
+        sequence_number=6,
+        step_type=AgentStepType.RESPONSE_DRAFT,
+        status=AgentStepStatus.COMPLETED,
+        input_data={
+            "issue_type": classification.issue_type.value,
+            "evidence_is_sufficient": evidence_assessment.is_sufficient,
+            "knowledge_article_ids": [str(article.id) for article in knowledge_articles],
+            "order_ids": [str(order.id) for order in customer_orders],
+        },
+        output_data=response_draft.model_dump(mode="json"),
+        evidence=[
+            {
+                "source": "knowledge_article",
+                "id": str(article.id),
+                "title": article.title,
+            }
+            for article in knowledge_articles
+        ]
+        + [
+            {
+                "source": "customer_order",
+                "id": str(order.id),
+                "order_number": order.order_number,
+            }
+            for order in customer_orders
+        ],
+        confidence=0.9 if response_draft.was_drafted else 0.0,
+        started_at=response_draft_started_at,
+        completed_at=datetime.now(UTC),
+    )
+
+    agent_run.drafted_response = response_draft.drafted_response
+
     session.add_all(
         [
             classification_step,
@@ -211,6 +257,7 @@ async def execute_agent_run(
             knowledge_step,
             order_lookup_step,
             evidence_assessment_step,
+            response_draft_step,
         ],
     )
     await session.commit()
