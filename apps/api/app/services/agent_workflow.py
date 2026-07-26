@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 
 from app.agent.classification import classify_ticket
 from app.agent.drafting import draft_support_response
+from app.agent.escalation import decide_escalation
 from app.agent.evidence import assess_evidence
 from app.agent.severity import assess_ticket_severity
 from app.models import (
@@ -28,7 +29,7 @@ async def execute_agent_run(
     session: AsyncSession,
     agent_run_id: uuid.UUID,
 ) -> AgentRun | None:
-    """Execute the currently implemented agent workflow steps."""
+    """Execute the deterministic support-agent workflow."""
 
     statement = (
         select(AgentRun)
@@ -248,7 +249,36 @@ async def execute_agent_run(
         completed_at=datetime.now(UTC),
     )
 
+    escalation_started_at = datetime.now(UTC)
+
+    escalation_decision = decide_escalation(
+        severity=severity.severity,
+        evidence_is_sufficient=evidence_assessment.is_sufficient,
+        response_was_drafted=response_draft.was_drafted,
+    )
+
+    escalation_step = AgentStep(
+        agent_run=agent_run,
+        sequence_number=7,
+        step_type=AgentStepType.ESCALATION_DECISION,
+        status=AgentStepStatus.COMPLETED,
+        input_data={
+            "severity": severity.severity.value,
+            "evidence_is_sufficient": evidence_assessment.is_sufficient,
+            "response_was_drafted": response_draft.was_drafted,
+        },
+        output_data=escalation_decision.model_dump(mode="json"),
+        evidence=[],
+        confidence=escalation_decision.confidence,
+        started_at=escalation_started_at,
+        completed_at=datetime.now(UTC),
+    )
+
     agent_run.drafted_response = response_draft.drafted_response
+    agent_run.recommendation = escalation_decision.recommendation
+    agent_run.confidence = escalation_decision.confidence
+    agent_run.status = AgentRunStatus.COMPLETED
+    agent_run.completed_at = datetime.now(UTC)
 
     session.add_all(
         [
@@ -258,6 +288,7 @@ async def execute_agent_run(
             order_lookup_step,
             evidence_assessment_step,
             response_draft_step,
+            escalation_step,
         ],
     )
     await session.commit()

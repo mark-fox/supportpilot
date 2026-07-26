@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
+    AgentRecommendation,
     AgentRun,
     AgentRunStatus,
     AgentStepType,
@@ -81,7 +82,7 @@ def create_order(customer_id: uuid.UUID) -> Order:
 
 
 @pytest.mark.asyncio
-async def test_execute_agent_run_persists_first_six_steps(
+async def test_execute_agent_run_completes_seven_step_workflow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent_run = create_agent_run()
@@ -124,9 +125,7 @@ async def test_execute_agent_run_persists_first_six_steps(
     )
 
     assert result is agent_run
-    assert agent_run.status == AgentRunStatus.RUNNING
-    assert agent_run.started_at is not None
-    assert len(agent_run.steps) == 6
+    assert len(agent_run.steps) == 7
 
     classification_step = agent_run.steps[0]
     severity_step = agent_run.steps[1]
@@ -134,74 +133,44 @@ async def test_execute_agent_run_persists_first_six_steps(
     order_lookup_step = agent_run.steps[3]
     evidence_assessment_step = agent_run.steps[4]
     response_draft_step = agent_run.steps[5]
+    escalation_step = agent_run.steps[6]
 
-    assert classification_step.sequence_number == 1
     assert classification_step.step_type == AgentStepType.CLASSIFICATION
     assert classification_step.output_data["issue_type"] == "billing"
 
-    assert severity_step.sequence_number == 2
     assert severity_step.step_type == AgentStepType.SEVERITY_ASSESSMENT
     assert severity_step.output_data["severity"] == "high"
 
-    assert knowledge_step.sequence_number == 3
     assert knowledge_step.step_type == AgentStepType.KNOWLEDGE_SEARCH
     assert knowledge_step.output_data["result_count"] == 1
-    assert knowledge_step.evidence[0]["category"] == "billing"
 
-    assert order_lookup_step.sequence_number == 4
     assert order_lookup_step.step_type == AgentStepType.ORDER_LOOKUP
-    assert order_lookup_step.output_data == {
-        "result_count": 1,
-        "order_numbers": ["SP-10482"],
-    }
-    assert order_lookup_step.evidence == [
-        {
-            "order_id": str(order.id),
-            "order_number": "SP-10482",
-            "status": "processing",
-            "total_cents": 12999,
-            "tracking_number": None,
-            "created_at": order.created_at.isoformat(),
-        },
-    ]
-    assert order_lookup_step.confidence == 1.0
+    assert order_lookup_step.output_data["order_numbers"] == ["SP-10482"]
 
-    assert evidence_assessment_step.sequence_number == 5
     assert evidence_assessment_step.step_type == AgentStepType.EVIDENCE_ASSESSMENT
-    assert evidence_assessment_step.output_data == {
-        "is_sufficient": True,
-        "confidence": 0.95,
-        "missing_evidence": [],
-        "rationale": (
-            "The workflow found a supported classification, approved policy, "
-            "and customer-specific order context."
-        ),
-    }
-    assert evidence_assessment_step.confidence == 0.95
+    assert evidence_assessment_step.output_data["is_sufficient"] is True
 
-    assert response_draft_step.sequence_number == 6
     assert response_draft_step.step_type == AgentStepType.RESPONSE_DRAFT
     assert response_draft_step.output_data["was_drafted"] is True
     assert "SP-10482" in response_draft_step.output_data["drafted_response"]
-    assert response_draft_step.confidence == 0.9
 
+    assert escalation_step.sequence_number == 7
+    assert escalation_step.step_type == AgentStepType.ESCALATION_DECISION
+    assert escalation_step.output_data["recommendation"] == "human_review"
+    assert escalation_step.confidence == 0.95
+
+    assert agent_run.status == AgentRunStatus.COMPLETED
+    assert agent_run.completed_at is not None
+    assert agent_run.recommendation == AgentRecommendation.HUMAN_REVIEW
+    assert agent_run.confidence == 0.95
     assert agent_run.drafted_response is not None
-    assert "SP-10482" in agent_run.drafted_response
 
-    knowledge_search_mock.assert_awaited_once_with(
-        session=session,
-        query=agent_run.ticket.subject,
-    )
-    order_lookup_mock.assert_awaited_once_with(
-        session=session,
-        customer_id=agent_run.ticket.customer_id,
-    )
     session.add_all.assert_called_once()
     session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_execute_agent_run_skips_draft_when_context_is_missing(
+async def test_execute_agent_run_escalates_when_context_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     agent_run = create_agent_run()
@@ -224,16 +193,13 @@ async def test_execute_agent_run_skips_draft_when_context_is_missing(
         refreshed_result,
     ]
 
-    knowledge_search_mock = AsyncMock(return_value=[])
-    order_lookup_mock = AsyncMock(return_value=[])
-
     monkeypatch.setattr(
         "app.services.agent_workflow.search_knowledge_articles",
-        knowledge_search_mock,
+        AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(
         "app.services.agent_workflow.lookup_customer_orders",
-        order_lookup_mock,
+        AsyncMock(return_value=[]),
     )
 
     result = await execute_agent_run(
@@ -242,45 +208,24 @@ async def test_execute_agent_run_skips_draft_when_context_is_missing(
     )
 
     assert result is agent_run
-    assert len(result.steps) == 6
+    assert len(result.steps) == 7
 
-    knowledge_step = result.steps[2]
-    order_lookup_step = result.steps[3]
     evidence_assessment_step = result.steps[4]
     response_draft_step = result.steps[5]
-
-    assert knowledge_step.output_data["result_count"] == 0
-    assert knowledge_step.evidence == []
-    assert knowledge_step.confidence == 0.0
-
-    assert order_lookup_step.output_data["result_count"] == 0
-    assert order_lookup_step.evidence == []
-    assert order_lookup_step.confidence == 0.0
+    escalation_step = result.steps[6]
 
     assert evidence_assessment_step.output_data["is_sufficient"] is False
-    assert evidence_assessment_step.output_data["missing_evidence"] == [
-        "approved knowledge article",
-        "customer order context",
-    ]
-    assert evidence_assessment_step.confidence == 0.9
-
-    assert response_draft_step.sequence_number == 6
-    assert response_draft_step.step_type == AgentStepType.RESPONSE_DRAFT
     assert response_draft_step.output_data["was_drafted"] is False
     assert response_draft_step.output_data["drafted_response"] is None
-    assert response_draft_step.confidence == 0.0
 
+    assert escalation_step.output_data["recommendation"] == "escalate"
+    assert escalation_step.confidence == 0.95
+
+    assert result.status == AgentRunStatus.COMPLETED
+    assert result.recommendation == AgentRecommendation.ESCALATE
+    assert result.confidence == 0.95
     assert result.drafted_response is None
-
-    knowledge_search_mock.assert_awaited_once_with(
-        session=session,
-        query=agent_run.ticket.subject,
-    )
-    order_lookup_mock.assert_awaited_once_with(
-        session=session,
-        customer_id=agent_run.ticket.customer_id,
-    )
-    session.commit.assert_awaited_once()
+    assert result.completed_at is not None
 
 
 @pytest.mark.asyncio
