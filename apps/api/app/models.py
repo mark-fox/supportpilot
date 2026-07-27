@@ -64,6 +64,14 @@ class AgentRecommendation(StrEnum):
     ESCALATE = "escalate"
 
 
+class HumanReviewAction(StrEnum):
+    """Decision made by a human reviewer after an agent run."""
+
+    APPROVE = "approve"
+    REQUEST_REVISION = "request_revision"
+    ESCALATE = "escalate"
+
+
 class AgentStepType(StrEnum):
     """Supported stages in the ticket-processing workflow."""
 
@@ -354,6 +362,11 @@ class AgentRun(Base):
         cascade="all, delete-orphan",
         order_by="AgentStep.sequence_number",
     )
+    reviews: Mapped[list["HumanReview"]] = relationship(
+        back_populates="agent_run",
+        cascade="all, delete-orphan",
+        order_by="HumanReview.created_at",
+    )
 
 
 class AgentStep(Base):
@@ -429,4 +442,48 @@ class AgentStep(Base):
 
     agent_run: Mapped[AgentRun] = relationship(
         back_populates="steps",
+    )
+
+
+class HumanReview(Base):
+    """A human decision recorded against a completed agent run."""
+
+    __tablename__ = "human_reviews"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    agent_run_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    action: Mapped[HumanReviewAction] = mapped_column(
+        Enum(
+            HumanReviewAction,
+            name="human_review_action",
+            values_callable=lambda enum_class: [item.value for item in enum_class],
+        ),
+        nullable=False,
+        index=True,
+    )
+    reviewer_note: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    revised_response: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    agent_run: Mapped[AgentRun] = relationship(
+        back_populates="reviews",
     )
