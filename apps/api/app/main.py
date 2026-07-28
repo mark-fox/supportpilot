@@ -11,6 +11,7 @@ from app.database import get_db_session
 from app.routes.agent_runs import router as agent_runs_router
 from app.routes.knowledge import router as knowledge_router
 from app.routes.orders import router as orders_router
+from app.routes.reviews import router as reviews_router
 from app.routes.tickets import router as tickets_router
 
 settings = get_settings()
@@ -32,6 +33,7 @@ app.add_middleware(
 app.include_router(agent_runs_router)
 app.include_router(knowledge_router)
 app.include_router(orders_router)
+app.include_router(reviews_router)
 app.include_router(tickets_router)
 
 

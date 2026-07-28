@@ -8,6 +8,7 @@ from app.models import (
     AgentRunStatus,
     AgentStepStatus,
     AgentStepType,
+    HumanReviewAction,
     KnowledgeCategory,
     OrderStatus,
     TicketPriority,
@@ -125,3 +126,24 @@ class AgentRunDetail(AgentRunSummary):
     """An agent run with its complete ordered workflow trace."""
 
     steps: list[AgentStepSummary]
+
+
+class HumanReviewCreate(BaseModel):
+    """Human decision submitted for a completed agent run."""
+
+    action: HumanReviewAction
+    reviewer_note: str | None = None
+    revised_response: str | None = None
+
+
+class HumanReviewSummary(BaseModel):
+    """Saved human review decision."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    agent_run_id: uuid.UUID
+    action: HumanReviewAction
+    reviewer_note: str | None
+    revised_response: str | None
+    created_at: datetime
