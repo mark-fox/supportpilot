@@ -1,6 +1,7 @@
 alembic
 email-validator
 fastapi
+langgraph
 pydantic-settings
 psycopg[binary]
 sqlalchemy[asyncio]
