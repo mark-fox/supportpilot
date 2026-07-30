@@ -38,3 +38,18 @@ async def get_agent_run(
     result = await session.execute(statement)
 
     return result.scalar_one_or_none()
+
+
+async def list_ticket_agent_runs(
+    session: AsyncSession,
+    ticket_id: uuid.UUID,
+) -> list[AgentRun]:
+    """Return all agent runs for one ticket, newest first."""
+
+    statement = (
+        select(AgentRun).where(AgentRun.ticket_id == ticket_id).order_by(AgentRun.created_at.desc())
+    )
+
+    result = await session.execute(statement)
+
+    return list(result.scalars().all())

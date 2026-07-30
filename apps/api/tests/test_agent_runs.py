@@ -16,7 +16,11 @@ from app.models import (
     AgentStepStatus,
     AgentStepType,
 )
-from app.services.agent_runs import create_agent_run, get_agent_run
+from app.services.agent_runs import (
+    create_agent_run,
+    get_agent_run,
+    list_ticket_agent_runs,
+)
 
 client = TestClient(app)
 
@@ -231,3 +235,37 @@ def test_read_agent_run_returns_not_found(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Agent run not found"}
+
+
+@pytest.mark.asyncio
+async def test_list_ticket_agent_runs_returns_newest_first() -> None:
+    ticket_id = uuid.uuid4()
+
+    newer_run = AgentRun(
+        id=uuid.uuid4(),
+        ticket_id=ticket_id,
+        status=AgentRunStatus.COMPLETED,
+        created_at=datetime.now(UTC),
+    )
+    older_run = AgentRun(
+        id=uuid.uuid4(),
+        ticket_id=ticket_id,
+        status=AgentRunStatus.COMPLETED,
+        created_at=datetime.now(UTC),
+    )
+
+    session = AsyncMock(spec=AsyncSession)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [
+        newer_run,
+        older_run,
+    ]
+    session.execute.return_value = result
+
+    agent_runs = await list_ticket_agent_runs(
+        session=session,
+        ticket_id=ticket_id,
+    )
+
+    assert agent_runs == [newer_run, older_run]
+    session.execute.assert_awaited_once()

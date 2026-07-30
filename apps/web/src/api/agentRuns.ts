@@ -66,3 +66,13 @@ export async function getAgentRun(
 
     return parseResponse<AgentRunDetail>(response)
 }
+
+export async function getTicketAgentRuns(
+    ticketId: string,
+): Promise<AgentRunSummary[]> {
+    const response = await fetch(
+        `${apiBaseUrl}/tickets/${ticketId}/agent-runs`,
+    )
+
+    return parseResponse<AgentRunSummary[]>(response)
+}

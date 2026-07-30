@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db_session
 from app.models import Ticket
 from app.schemas import AgentRunDetail, AgentRunSummary
-from app.services.agent_runs import create_agent_run, get_agent_run
+from app.services.agent_runs import (
+    create_agent_run,
+    get_agent_run,
+    list_ticket_agent_runs,
+)
 from app.services.agent_workflow import (
     AgentRunNotExecutableError,
     execute_agent_run,
@@ -100,3 +104,31 @@ async def execute_run(
         )
 
     return AgentRunDetail.model_validate(agent_run)
+
+
+@router.get(
+    "/tickets/{ticket_id}/agent-runs",
+    response_model=list[AgentRunSummary],
+)
+async def read_ticket_agent_runs(
+    ticket_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> list[AgentRunSummary]:
+    """Return the saved agent-run history for one ticket."""
+
+    ticket_exists = await session.scalar(
+        select(Ticket.id).where(Ticket.id == ticket_id),
+    )
+
+    if ticket_exists is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Ticket not found",
+        )
+
+    agent_runs = await list_ticket_agent_runs(
+        session=session,
+        ticket_id=ticket_id,
+    )
+
+    return [AgentRunSummary.model_validate(agent_run) for agent_run in agent_runs]

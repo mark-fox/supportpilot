@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import {
   createAgentRun,
   executeAgentRun,
+  getAgentRun,
+  getTicketAgentRuns,
 } from './api/agentRuns'
 import { createHumanReview } from './api/reviews'
 import { getTicket, getTickets } from './api/tickets'
@@ -101,6 +103,7 @@ function App() {
         if (loadedTickets.length > 0) {
           const firstTicket = await getTicket(loadedTickets[0].id)
           setSelectedTicket(firstTicket)
+          await loadLatestAgentRun(firstTicket.id)
         }
       } catch (error) {
         const message =
@@ -134,6 +137,18 @@ function App() {
     )
   }
 
+  async function loadLatestAgentRun(ticketId: string) {
+    const runs = await getTicketAgentRuns(ticketId)
+
+    if (runs.length === 0) {
+      setAgentRun(null)
+      return
+    }
+
+    const latestRun = await getAgentRun(runs[0].id)
+    setAgentRun(latestRun)
+  }
+
   async function handleTicketSelect(ticketId: string) {
     if (selectedTicket?.id === ticketId) {
       return
@@ -149,7 +164,9 @@ function App() {
 
     try {
       const ticket = await getTicket(ticketId)
+
       setSelectedTicket(ticket)
+      await loadLatestAgentRun(ticketId)
     } catch (error) {
       const message =
         error instanceof Error
