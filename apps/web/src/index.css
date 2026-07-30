@@ -528,6 +528,106 @@ textarea {
   line-height: 1.65;
 }
 
+.review-section {
+  border: 1px solid #c8c2b7;
+  background: #ece9e1;
+  padding: 18px;
+}
+
+.review-note-field {
+  display: grid;
+  gap: 8px;
+  color: #625e55;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.review-note-field textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #c8c2b7;
+  border-radius: 4px;
+  background: #f8f6f1;
+  padding: 12px;
+  color: #272623;
+  line-height: 1.5;
+}
+
+.review-note-field textarea:focus {
+  outline: 2px solid #826b9b;
+  outline-offset: 1px;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.review-button {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 9px 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.review-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.approve-button {
+  border-color: #627b5f;
+  background: #dce7d8;
+  color: #42563f;
+}
+
+.revision-button {
+  border-color: #9a7b37;
+  background: #eee2bf;
+  color: #70571f;
+}
+
+.escalate-button {
+  border-color: #9a5143;
+  background: #ead2cc;
+  color: #783b31;
+}
+
+.review-error {
+  margin: 12px 0 0;
+  color: #8b3d2f;
+  font-size: 13px;
+}
+
+.review-result {
+  display: grid;
+  gap: 8px;
+  border-left: 3px solid #668764;
+  padding-left: 14px;
+}
+
+.review-result p {
+  margin: 0;
+  color: #625e55;
+}
+
+.review-result span {
+  color: #777267;
+  font-size: 12px;
+}
+
+.review-complete-badge {
+  border-radius: 3px;
+  background: #dce7d8;
+  padding: 4px 7px;
+  color: #42563f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
 @media (max-width: 1200px) {
   .workspace-grid {
     grid-template-columns: 300px minmax(0, 1fr);

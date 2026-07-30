@@ -4,11 +4,16 @@ import {
   createAgentRun,
   executeAgentRun,
 } from './api/agentRuns'
+import { createHumanReview } from './api/reviews'
 import { getTicket, getTickets } from './api/tickets'
 import type {
   AgentRunDetail,
   AgentStepSummary,
 } from './types/agentRun'
+import type {
+  HumanReviewAction,
+  HumanReviewSummary,
+} from './types/review'
 import type { TicketDetail, TicketSummary } from './types/ticket'
 
 function formatDate(dateValue: string): string {
@@ -72,14 +77,20 @@ function App() {
   const [selectedTicket, setSelectedTicket] =
     useState<TicketDetail | null>(null)
   const [agentRun, setAgentRun] = useState<AgentRunDetail | null>(null)
+  const [humanReview, setHumanReview] =
+    useState<HumanReviewSummary | null>(null)
+
+  const [reviewerNote, setReviewerNote] = useState('')
 
   const [isQueueLoading, setIsQueueLoading] = useState(true)
   const [isTicketLoading, setIsTicketLoading] = useState(false)
   const [isAgentRunning, setIsAgentRunning] = useState(false)
+  const [isReviewSubmitting, setIsReviewSubmitting] = useState(false)
 
   const [queueError, setQueueError] = useState<string | null>(null)
   const [ticketError, setTicketError] = useState<string | null>(null)
   const [agentError, setAgentError] = useState<string | null>(null)
+  const [reviewError, setReviewError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadTickets() {
@@ -106,6 +117,23 @@ function App() {
     void loadTickets()
   }, [])
 
+  async function refreshSelectedTicket(ticketId: string) {
+    const refreshedTicket = await getTicket(ticketId)
+    setSelectedTicket(refreshedTicket)
+
+    setTickets((currentTickets) =>
+      currentTickets.map((ticket) =>
+        ticket.id === refreshedTicket.id
+          ? {
+            ...ticket,
+            status: refreshedTicket.status,
+            updated_at: refreshedTicket.updated_at,
+          }
+          : ticket,
+      ),
+    )
+  }
+
   async function handleTicketSelect(ticketId: string) {
     if (selectedTicket?.id === ticketId) {
       return
@@ -115,6 +143,9 @@ function App() {
     setTicketError(null)
     setAgentRun(null)
     setAgentError(null)
+    setHumanReview(null)
+    setReviewerNote('')
+    setReviewError(null)
 
     try {
       const ticket = await getTicket(ticketId)
@@ -139,6 +170,9 @@ function App() {
     setIsAgentRunning(true)
     setAgentError(null)
     setAgentRun(null)
+    setHumanReview(null)
+    setReviewerNote('')
+    setReviewError(null)
 
     try {
       const createdRun = await createAgentRun(selectedTicket.id)
@@ -154,6 +188,42 @@ function App() {
       setAgentError(message)
     } finally {
       setIsAgentRunning(false)
+    }
+  }
+
+  async function handleReviewAction(action: HumanReviewAction) {
+    if (!agentRun || !selectedTicket || humanReview) {
+      return
+    }
+
+    const normalizedNote = reviewerNote.trim()
+
+    if (action === 'request_revision' && !normalizedNote) {
+      setReviewError('Add a reviewer note before requesting revision.')
+      return
+    }
+
+    setIsReviewSubmitting(true)
+    setReviewError(null)
+
+    try {
+      const review = await createHumanReview(agentRun.id, {
+        action,
+        reviewer_note: normalizedNote || null,
+        revised_response: null,
+      })
+
+      setHumanReview(review)
+      await refreshSelectedTicket(selectedTicket.id)
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'An unexpected error occurred'
+
+      setReviewError(message)
+    } finally {
+      setIsReviewSubmitting(false)
     }
   }
 
@@ -200,8 +270,8 @@ function App() {
             {tickets.map((ticket) => (
               <button
                 className={`ticket-card ${selectedTicket?.id === ticket.id
-                    ? 'ticket-card-selected'
-                    : ''
+                  ? 'ticket-card-selected'
+                  : ''
                   }`}
                 key={ticket.id}
                 onClick={() => void handleTicketSelect(ticket.id)}
@@ -256,7 +326,7 @@ function App() {
 
                   <button
                     className="run-agent-button"
-                    disabled={isAgentRunning}
+                    disabled={isAgentRunning || isReviewSubmitting}
                     onClick={() => void handleRunAgent()}
                     type="button"
                   >
@@ -336,6 +406,93 @@ function App() {
                     <pre className="drafted-response">
                       {agentRun.drafted_response}
                     </pre>
+                  </section>
+                )}
+
+                {agentRun && (
+                  <section className="review-section">
+                    <div className="section-heading">
+                      <div>
+                        <p className="eyebrow">Human control</p>
+                        <h3>Review decision</h3>
+                      </div>
+
+                      {humanReview && (
+                        <span className="review-complete-badge">
+                          {formatLabel(humanReview.action)}
+                        </span>
+                      )}
+                    </div>
+
+                    {humanReview ? (
+                      <div className="review-result">
+                        <strong>
+                          Decision recorded: {formatLabel(humanReview.action)}
+                        </strong>
+
+                        {humanReview.reviewer_note && (
+                          <p>{humanReview.reviewer_note}</p>
+                        )}
+
+                        <span>
+                          Ticket status: {formatLabel(selectedTicket.status)}
+                        </span>
+                      </div>
+                    ) : (
+                      <>
+                        <label className="review-note-field">
+                          Reviewer note
+                          <textarea
+                            disabled={isReviewSubmitting}
+                            onChange={(event) =>
+                              setReviewerNote(event.target.value)
+                            }
+                            placeholder="Required for revision requests; optional for approval or escalation."
+                            rows={4}
+                            value={reviewerNote}
+                          />
+                        </label>
+
+                        {reviewError && (
+                          <p className="review-error">{reviewError}</p>
+                        )}
+
+                        <div className="review-actions">
+                          <button
+                            className="review-button approve-button"
+                            disabled={isReviewSubmitting}
+                            onClick={() =>
+                              void handleReviewAction('approve')
+                            }
+                            type="button"
+                          >
+                            Approve draft
+                          </button>
+
+                          <button
+                            className="review-button revision-button"
+                            disabled={isReviewSubmitting}
+                            onClick={() =>
+                              void handleReviewAction('request_revision')
+                            }
+                            type="button"
+                          >
+                            Request revision
+                          </button>
+
+                          <button
+                            className="review-button escalate-button"
+                            disabled={isReviewSubmitting}
+                            onClick={() =>
+                              void handleReviewAction('escalate')
+                            }
+                            type="button"
+                          >
+                            Escalate
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </section>
                 )}
 
