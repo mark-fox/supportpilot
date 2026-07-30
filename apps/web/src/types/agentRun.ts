@@ -1,3 +1,5 @@
+import type { HumanReviewSummary } from './review'
+
 export type AgentRunStatus =
     | 'pending'
     | 'running'
@@ -52,4 +54,5 @@ export interface AgentRunSummary {
 
 export interface AgentRunDetail extends AgentRunSummary {
     steps: AgentStepSummary[]
+    reviews: HumanReviewSummary[]
 }

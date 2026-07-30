@@ -29,10 +29,15 @@ async def get_agent_run(
     session: AsyncSession,
     agent_run_id: uuid.UUID,
 ) -> AgentRun | None:
-    """Return one agent run with its ordered workflow steps."""
+    """Return one agent run with its workflow steps and reviews."""
 
     statement = (
-        select(AgentRun).options(selectinload(AgentRun.steps)).where(AgentRun.id == agent_run_id)
+        select(AgentRun)
+        .options(
+            selectinload(AgentRun.steps),
+            selectinload(AgentRun.reviews),
+        )
+        .where(AgentRun.id == agent_run_id)
     )
 
     result = await session.execute(statement)

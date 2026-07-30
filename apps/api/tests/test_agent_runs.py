@@ -15,6 +15,8 @@ from app.models import (
     AgentStep,
     AgentStepStatus,
     AgentStepType,
+    HumanReview,
+    HumanReviewAction,
 )
 from app.services.agent_runs import (
     create_agent_run,
@@ -64,13 +66,16 @@ async def test_create_agent_run_persists_pending_run() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_agent_run_returns_run_with_steps() -> None:
+async def test_get_agent_run_returns_run_with_steps_and_reviews() -> None:
+    created_at = datetime.now(UTC)
+
     agent_run = AgentRun(
         id=uuid.uuid4(),
         ticket_id=uuid.uuid4(),
         status=AgentRunStatus.RUNNING,
-        created_at=datetime.now(UTC),
+        created_at=created_at,
     )
+
     agent_run.steps = [
         AgentStep(
             id=uuid.uuid4(),
@@ -79,9 +84,18 @@ async def test_get_agent_run_returns_run_with_steps() -> None:
             step_type=AgentStepType.CLASSIFICATION,
             status=AgentStepStatus.COMPLETED,
             output_data={"issue_type": "billing"},
-            created_at=datetime.now(UTC),
+            created_at=created_at,
         ),
     ]
+
+    review = HumanReview(
+        id=uuid.uuid4(),
+        agent_run_id=agent_run.id,
+        action=HumanReviewAction.APPROVE,
+        reviewer_note="Draft verified.",
+        created_at=created_at,
+    )
+    agent_run.reviews = [review]
 
     session = AsyncMock(spec=AsyncSession)
     result = MagicMock()
@@ -96,6 +110,8 @@ async def test_get_agent_run_returns_run_with_steps() -> None:
     assert result_run is agent_run
     assert len(result_run.steps) == 1
     assert result_run.steps[0].sequence_number == 1
+    assert len(result_run.reviews) == 1
+    assert result_run.reviews[0].action == HumanReviewAction.APPROVE
 
 
 def test_start_agent_run_returns_created_run(
@@ -187,6 +203,7 @@ def test_read_agent_run_returns_trace(
         created_at=created_at,
     )
     agent_run.steps = [step]
+    agent_run.reviews = []
 
     get_run_mock = AsyncMock(return_value=agent_run)
 

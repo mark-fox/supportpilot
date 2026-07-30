@@ -146,7 +146,13 @@ function App() {
     }
 
     const latestRun = await getAgentRun(runs[0].id)
+
     setAgentRun(latestRun)
+    setHumanReview(
+      latestRun.reviews.length > 0
+        ? latestRun.reviews[latestRun.reviews.length - 1]
+        : null,
+    )
   }
 
   async function handleTicketSelect(ticketId: string) {
@@ -196,6 +202,7 @@ function App() {
       const completedRun = await executeAgentRun(createdRun.id)
 
       setAgentRun(completedRun)
+      setHumanReview(null)
     } catch (error) {
       const message =
         error instanceof Error
