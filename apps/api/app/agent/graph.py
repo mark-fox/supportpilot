@@ -3,20 +3,30 @@ from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from app.agent.classification import ClassificationResult, classify_ticket
+from app.agent.severity import assess_ticket_severity
+from app.models import Ticket
+
 
 class SupportWorkflowState(TypedDict):
     """Shared state passed between SupportPilot workflow nodes."""
 
     agent_run_id: uuid.UUID
+    ticket: Ticket
+    classification: dict | None
+    severity: dict | None
     completed_nodes: list[str]
 
 
-def record_classification(
+def run_classification(
     state: SupportWorkflowState,
-) -> dict[str, list[str]]:
-    """Record execution of the classification node."""
+) -> dict[str, dict | list[str]]:
+    """Classify the support ticket and update workflow state."""
+
+    classification = classify_ticket(state["ticket"])
 
     return {
+        "classification": classification.model_dump(mode="json"),
         "completed_nodes": [
             *state["completed_nodes"],
             "classification",
@@ -24,12 +34,29 @@ def record_classification(
     }
 
 
-def record_severity_assessment(
+def run_severity_assessment(
     state: SupportWorkflowState,
-) -> dict[str, list[str]]:
-    """Record execution of the severity-assessment node."""
+) -> dict[str, dict | list[str]]:
+    """Assess severity using the classification result."""
+
+    classification_data = state["classification"]
+
+    if classification_data is None:
+        raise ValueError(
+            "Classification must complete before severity assessment.",
+        )
+
+    classification = ClassificationResult.model_validate(
+        classification_data,
+    )
+
+    severity = assess_ticket_severity(
+        ticket=state["ticket"],
+        issue_type=classification.issue_type,
+    )
 
     return {
+        "severity": severity.model_dump(mode="json"),
         "completed_nodes": [
             *state["completed_nodes"],
             "severity_assessment",
@@ -40,7 +67,7 @@ def record_severity_assessment(
 def record_knowledge_search(
     state: SupportWorkflowState,
 ) -> dict[str, list[str]]:
-    """Record execution of the knowledge-search node."""
+    """Temporarily record the knowledge-search node."""
 
     return {
         "completed_nodes": [
@@ -53,7 +80,7 @@ def record_knowledge_search(
 def record_order_lookup(
     state: SupportWorkflowState,
 ) -> dict[str, list[str]]:
-    """Record execution of the order-lookup node."""
+    """Temporarily record the order-lookup node."""
 
     return {
         "completed_nodes": [
@@ -66,7 +93,7 @@ def record_order_lookup(
 def record_evidence_assessment(
     state: SupportWorkflowState,
 ) -> dict[str, list[str]]:
-    """Record execution of the evidence-assessment node."""
+    """Temporarily record the evidence-assessment node."""
 
     return {
         "completed_nodes": [
@@ -79,7 +106,7 @@ def record_evidence_assessment(
 def record_response_draft(
     state: SupportWorkflowState,
 ) -> dict[str, list[str]]:
-    """Record execution of the response-draft node."""
+    """Temporarily record the response-draft node."""
 
     return {
         "completed_nodes": [
@@ -92,7 +119,7 @@ def record_response_draft(
 def record_escalation_decision(
     state: SupportWorkflowState,
 ) -> dict[str, list[str]]:
-    """Record execution of the escalation-decision node."""
+    """Temporarily record the escalation-decision node."""
 
     return {
         "completed_nodes": [
@@ -107,10 +134,10 @@ def build_support_workflow():
 
     builder = StateGraph(SupportWorkflowState)
 
-    builder.add_node("classification", record_classification)
+    builder.add_node("classification", run_classification)
     builder.add_node(
         "severity_assessment",
-        record_severity_assessment,
+        run_severity_assessment,
     )
     builder.add_node("knowledge_search", record_knowledge_search)
     builder.add_node("order_lookup", record_order_lookup)

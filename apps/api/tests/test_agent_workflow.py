@@ -81,6 +81,34 @@ def create_order(customer_id: uuid.UUID) -> Order:
     )
 
 
+def create_graph_result(agent_run: AgentRun) -> dict:
+    """Create the LangGraph output used by workflow service tests."""
+
+    return {
+        "agent_run_id": agent_run.id,
+        "ticket": agent_run.ticket,
+        "classification": {
+            "issue_type": "billing",
+            "confidence": 0.9,
+            "rationale": "Matched support keywords: charge, charged.",
+        },
+        "severity": {
+            "severity": "high",
+            "confidence": 0.9,
+            "rationale": "The ticket is explicitly marked high priority.",
+        },
+        "completed_nodes": [
+            "classification",
+            "severity_assessment",
+            "knowledge_search",
+            "order_lookup",
+            "evidence_assessment",
+            "response_draft",
+            "escalation_decision",
+        ],
+    }
+
+
 @pytest.mark.asyncio
 async def test_execute_agent_run_completes_seven_step_workflow(
     monkeypatch: pytest.MonkeyPatch,
@@ -107,9 +135,16 @@ async def test_execute_agent_run_completes_seven_step_workflow(
         refreshed_result,
     ]
 
+    graph_mock = AsyncMock(
+        return_value=create_graph_result(agent_run),
+    )
     knowledge_search_mock = AsyncMock(return_value=[article])
     order_lookup_mock = AsyncMock(return_value=[order])
 
+    monkeypatch.setattr(
+        "app.services.agent_workflow.support_workflow.ainvoke",
+        graph_mock,
+    )
     monkeypatch.setattr(
         "app.services.agent_workflow.search_knowledge_articles",
         knowledge_search_mock,
@@ -165,6 +200,23 @@ async def test_execute_agent_run_completes_seven_step_workflow(
     assert agent_run.confidence == 0.95
     assert agent_run.drafted_response is not None
 
+    graph_mock.assert_awaited_once_with(
+        {
+            "agent_run_id": agent_run.id,
+            "ticket": agent_run.ticket,
+            "classification": None,
+            "severity": None,
+            "completed_nodes": [],
+        },
+    )
+    knowledge_search_mock.assert_awaited_once_with(
+        session=session,
+        query=agent_run.ticket.subject,
+    )
+    order_lookup_mock.assert_awaited_once_with(
+        session=session,
+        customer_id=agent_run.ticket.customer_id,
+    )
     session.add_all.assert_called_once()
     session.commit.assert_awaited_once()
 
@@ -193,13 +245,23 @@ async def test_execute_agent_run_escalates_when_context_is_missing(
         refreshed_result,
     ]
 
+    graph_mock = AsyncMock(
+        return_value=create_graph_result(agent_run),
+    )
+    knowledge_search_mock = AsyncMock(return_value=[])
+    order_lookup_mock = AsyncMock(return_value=[])
+
+    monkeypatch.setattr(
+        "app.services.agent_workflow.support_workflow.ainvoke",
+        graph_mock,
+    )
     monkeypatch.setattr(
         "app.services.agent_workflow.search_knowledge_articles",
-        AsyncMock(return_value=[]),
+        knowledge_search_mock,
     )
     monkeypatch.setattr(
         "app.services.agent_workflow.lookup_customer_orders",
-        AsyncMock(return_value=[]),
+        order_lookup_mock,
     )
 
     result = await execute_agent_run(
@@ -226,6 +288,24 @@ async def test_execute_agent_run_escalates_when_context_is_missing(
     assert result.confidence == 0.95
     assert result.drafted_response is None
     assert result.completed_at is not None
+
+    graph_mock.assert_awaited_once_with(
+        {
+            "agent_run_id": agent_run.id,
+            "ticket": agent_run.ticket,
+            "classification": None,
+            "severity": None,
+            "completed_nodes": [],
+        },
+    )
+    knowledge_search_mock.assert_awaited_once_with(
+        session=session,
+        query=agent_run.ticket.subject,
+    )
+    order_lookup_mock.assert_awaited_once_with(
+        session=session,
+        customer_id=agent_run.ticket.customer_id,
+    )
 
 
 @pytest.mark.asyncio

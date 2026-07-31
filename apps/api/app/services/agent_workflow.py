@@ -5,11 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.agent.classification import classify_ticket
+from app.agent.classification import ClassificationResult
 from app.agent.drafting import draft_support_response
 from app.agent.escalation import decide_escalation
 from app.agent.evidence import assess_evidence
-from app.agent.severity import assess_ticket_severity
+from app.agent.graph import support_workflow
+from app.agent.severity import SeverityResult
 from app.models import (
     AgentRun,
     AgentRunStatus,
@@ -54,8 +55,30 @@ async def execute_agent_run(
     agent_run.status = AgentRunStatus.RUNNING
     agent_run.started_at = datetime.now(UTC)
 
+    graph_result = await support_workflow.ainvoke(
+        {
+            "agent_run_id": agent_run.id,
+            "ticket": agent_run.ticket,
+            "classification": None,
+            "severity": None,
+            "completed_nodes": [],
+        },
+    )
+
+    classification_data = graph_result["classification"]
+    severity_data = graph_result["severity"]
+
+    if classification_data is None or severity_data is None:
+        raise RuntimeError(
+            "LangGraph did not produce classification and severity results.",
+        )
+
+    classification = ClassificationResult.model_validate(
+        classification_data,
+    )
+    severity = SeverityResult.model_validate(severity_data)
+
     classification_started_at = datetime.now(UTC)
-    classification = classify_ticket(agent_run.ticket)
 
     classification_step = AgentStep(
         agent_run=agent_run,
@@ -74,10 +97,6 @@ async def execute_agent_run(
     )
 
     severity_started_at = datetime.now(UTC)
-    severity = assess_ticket_severity(
-        ticket=agent_run.ticket,
-        issue_type=classification.issue_type,
-    )
 
     severity_step = AgentStep(
         agent_run=agent_run,
